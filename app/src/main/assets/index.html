@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Daily Hours</title>
+<style>
+  :root {
+    --bg: #f2f4f3;
+    --surface: #ffffff;
+    --ink: #1d2a2a;
+    --ink-2: #566564;
+    --line: #dbe1df;
+    --accent: #1f5f5b;
+    --accent-ink: #ffffff;
+    --tint: #cfe6e2;
+    --tint-strong: #8fc4bc;
+    --today: #b4541c;
+    --weekend: #eaeeed;
+    --danger: #a3372b;
+    --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-num: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #121a1a;
+      --surface: #1a2424;
+      --ink: #e6eeec;
+      --ink-2: #9db0ad;
+      --line: #2b3938;
+      --accent: #6fc2b8;
+      --accent-ink: #0d1a19;
+      --tint: #24413e;
+      --tint-strong: #2f6b64;
+      --today: #f0925a;
+      --weekend: #161f1f;
+      --danger: #ef8a7d;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #121a1a;
+    --surface: #1a2424;
+    --ink: #e6eeec;
+    --ink-2: #9db0ad;
+    --line: #2b3938;
+    --accent: #6fc2b8;
+    --accent-ink: #0d1a19;
+    --tint: #24413e;
+    --tint-strong: #2f6b64;
+    --today: #f0925a;
+    --weekend: #161f1f;
+    --danger: #ef8a7d;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.45;
+    padding-inline: 16px;
+    padding-block: 24px 48px;
+  }
+  main { max-width: 640px; margin-inline: auto; display: grid; gap: 16px; }
+  h1 { font-size: 13px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); margin: 0; }
+  button, input { font: inherit; color: inherit; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
+
+  /* Entry */
+  .day-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .day-label { text-align: center; flex: 1; }
+  .day-label .big { font-size: 20px; font-weight: 600; text-wrap: balance; }
+  .day-label .sub { font-size: 13px; color: var(--ink-2); }
+  .icon-btn { width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line); background: transparent; cursor: pointer; font-size: 18px; line-height: 1; }
+  .icon-btn:hover { background: var(--bg); }
+
+  form { display: grid; gap: 12px; margin-top: 16px; }
+  .field { display: flex; align-items: stretch; justify-content: center; gap: 8px; }
+  .field input {
+    width: 150px; text-align: center; font-family: var(--font-num); font-size: 34px; font-weight: 500;
+    padding: 8px 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg);
+  }
+  .field .unit { align-self: center; color: var(--ink-2); font-size: 15px; }
+  .step { width: 48px; font-size: 22px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .chip { font-family: var(--font-num); font-size: 14px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; cursor: pointer; }
+  .chip:hover { border-color: var(--accent); }
+  .actions { display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: wrap; }
+  .primary { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px; padding: 11px 28px; font-weight: 600; cursor: pointer; }
+  .primary:hover { filter: brightness(1.07); }
+  .link { background: none; border: 0; color: var(--danger); cursor: pointer; padding: 8px; font-size: 14px; }
+  .status { min-height: 20px; text-align: center; font-size: 13px; color: var(--ink-2); }
+  .status.err { color: var(--danger); }
+
+  /* Totals */
+  .totals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .total { padding: 14px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+  .total .k { font-size: 12px; color: var(--ink-2); letter-spacing: .04em; text-transform: uppercase; }
+  .total .v { font-family: var(--font-num); font-size: 26px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .total .v small { font-size: 13px; color: var(--ink-2); margin-left: 2px; }
+
+  /* Calendar */
+  .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 8px; }
+  .cal-head .title { font-weight: 600; font-size: 16px; }
+  .cal-head .btns { display: flex; gap: 6px; }
+  .cal-head .icon-btn { width: 36px; height: 36px; font-size: 16px; }
+  .cal-head .today-btn { font-size: 13px; padding: 0 12px; width: auto; }
+  .grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)) 52px; gap: 4px; }
+  .dow { font-size: 11px; color: var(--ink-2); text-align: center; letter-spacing: .06em; text-transform: uppercase; padding-bottom: 2px; }
+  .cell {
+    aspect-ratio: 1 / 1.05; border: 1px solid transparent; border-radius: 6px; background: var(--bg);
+    display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start;
+    padding: 4px 5px; cursor: pointer; text-align: left; min-width: 0;
+  }
+  .cell.weekend { background: var(--weekend); }
+  .cell.blank { visibility: hidden; cursor: default; }
+  .cell .d { font-size: 11px; color: var(--ink-2); }
+  .cell .h { font-family: var(--font-num); font-size: 13px; font-weight: 500; align-self: flex-end; font-variant-numeric: tabular-nums; }
+  .cell.has { border-color: var(--tint-strong); }
+  .cell.today .d { color: var(--today); font-weight: 700; }
+  .cell.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .wk { font-family: var(--font-num); font-size: 12px; color: var(--ink-2); display: flex; align-items: center; justify-content: center; border-left: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  .wk.head { border-left: 0; }
+  .note { font-size: 12px; color: var(--ink-2); text-align: center; }
+  @media (max-width: 420px) {
+    .cell .h { font-size: 11px; }
+    .field input { width: 120px; font-size: 30px; }
+    .grid { grid-template-columns: repeat(7, minmax(0, 1fr)) 40px; gap: 3px; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .cell, .chip, .icon-btn { transition: background .12s, border-color .12s; }
+  }
+</style>
+</head>
+<body>
+
+<main>
+  <h1>Daily hours</h1>
+
+  <section class="card" aria-label="Log hours">
+    <div class="day-nav">
+      <button class="icon-btn" id="prev" type="button" aria-label="Previous day">&#8249;</button>
+      <div class="day-label">
+        <div class="big" id="dayBig"></div>
+        <div class="sub" id="daySub"></div>
+      </div>
+      <button class="icon-btn" id="next" type="button" aria-label="Next day">&#8250;</button>
+    </div>
+    <form id="form" autocomplete="off">
+      <div class="field">
+        <button class="icon-btn step" id="minus" type="button" aria-label="Subtract 15 minutes">&minus;</button>
+        <input id="hours" inputmode="decimal" placeholder="0" aria-label="Hours worked">
+        <span class="unit">hrs</span>
+        <button class="icon-btn step" id="plus" type="button" aria-label="Add 15 minutes">+</button>
+      </div>
+      <div class="chips" id="chips"></div>
+      <div class="actions">
+        <button class="primary" type="submit">Save</button>
+        <button class="link" id="clear" type="button" hidden>Clear this day</button>
+      </div>
+      <div class="status" id="status" role="status"></div>
+    </form>
+  </section>
+
+  <section class="totals" aria-label="Totals">
+    <div class="total"><div class="k">This week</div><div class="v" id="tWeek">0</div></div>
+    <div class="total"><div class="k" id="tMonthK">Month</div><div class="v" id="tMonth">0</div></div>
+    <div class="total"><div class="k">Avg / day</div><div class="v" id="tAvg">0</div></div>
+  </section>
+
+  <section class="card" aria-label="Calendar">
+    <div class="cal-head">
+      <div class="title" id="calTitle"></div>
+      <div class="btns">
+        <button class="icon-btn today-btn" id="todayBtn" type="button">Today</button>
+        <button class="icon-btn" id="mPrev" type="button" aria-label="Previous month">&#8249;</button>
+        <button class="icon-btn" id="mNext" type="button" aria-label="Next month">&#8250;</button>
+      </div>
+    </div>
+    <div class="grid" id="grid"></div>
+  </section>
+
+</main>
+
+<script>
+(function () {
+  var MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  var DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  var DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+  var entries = {};     // "YYYY-MM-DD" -> hours
+  var store = null;     // { save(date, hours), remove(date) }
+  var selected = todayStr();
+  var view = { y: +selected.slice(0, 4), m: +selected.slice(5, 7) - 1 };
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function fmtDate(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+  function todayStr() { return fmtDate(new Date()); }
+  function parseDate(s) { return new Date(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)); }
+  function addDays(s, n) { var d = parseDate(s); d.setDate(d.getDate() + n); return fmtDate(d); }
+  function round2(n) { return Math.round(n * 100) / 100; }
+  function fmt(n) { return String(round2(n)); }
+
+  /* Accepts "7.5", "7,5", or "7:30". Returns number, null for empty, NaN for invalid. */
+  function parseHours(text) {
+    var t = String(text).trim().replace(",", ".");
+    if (t === "") return null;
+    var m = t.match(/^(\d+):([0-5]?\d)$/);
+    if (m) return +m[1] + (+m[2]) / 60;
+    if (!/^\d*\.?\d+$/.test(t)) return NaN;
+    return parseFloat(t);
+  }
+
+  /* ---------- Storage: shared db when available, otherwise this browser ---------- */
+  function localStore() {
+    var key = "daily-hours-v1";
+    var nativeStore = window.AndroidStore || null;
+    function read() {
+      try { return JSON.parse(nativeStore ? nativeStore.load() : (localStorage.getItem(key) || "{}")) || {}; }
+      catch (e) { return {}; }
+    }
+    function persist() {
+      var json = JSON.stringify(entries);
+      try { if (nativeStore) nativeStore.save(json); else localStorage.setItem(key, json); } catch (e) {}
+    }
+    entries = read();
+    return {
+      save: function (d, h) { entries[d] = h; persist(); render(); return Promise.resolve(); },
+      remove: function (d) { delete entries[d]; persist(); render(); return Promise.resolve(); }
+    };
+  }
+
+  /* ---------- Rendering ---------- */
+  function weekStart(s) { return addDays(s, -parseDate(s).getDay()); }
+
+  function sumRange(from, to) {
+    var total = 0, count = 0;
+    Object.keys(entries).forEach(function (k) {
+      if (k >= from && k <= to) { total += entries[k]; count++; }
+    });
+    return { total: total, count: count };
+  }
+
+  function renderEntry() {
+    var d = parseDate(selected);
+    $("dayBig").textContent = DAYS[d.getDay()] + ", " + MONTHS[d.getMonth()].slice(0, 3) + " " + d.getDate();
+    var t = todayStr();
+    $("daySub").textContent = selected === t ? "Today" : (selected === addDays(t, -1) ? "Yesterday" : d.getFullYear());
+    $("clear").hidden = !(selected in entries);
+  }
+
+  function setInputFromEntry() {
+    $("hours").value = selected in entries ? fmt(entries[selected]) : "";
+    $("status").textContent = selected in entries ? "Saved" : "Nothing logged for this day";
+    $("status").className = "status";
+  }
+
+  function renderTotals() {
+    var t = todayStr();
+    var ws = weekStart(t), we = addDays(ws, 6);
+    var w = sumRange(ws, we);
+    var first = view.y + "-" + pad(view.m + 1) + "-01";
+    var last = view.y + "-" + pad(view.m + 1) + "-31";
+    var mo = sumRange(first, last);
+    $("tWeek").innerHTML = fmt(w.total) + "<small>h</small>";
+    $("tMonthK").textContent = MONTHS[view.m];
+    $("tMonth").innerHTML = fmt(mo.total) + "<small>h</small>";
+    $("tAvg").innerHTML = (mo.count ? fmt(mo.total / mo.count) : "0") + "<small>h</small>";
+  }
+
+  function renderCalendar() {
+    $("calTitle").textContent = MONTHS[view.m] + " " + view.y;
+    var g = $("grid");
+    g.innerHTML = "";
+    DOW.forEach(function (n) { var e = document.createElement("div"); e.className = "dow"; e.textContent = n.slice(0, 2); g.appendChild(e); });
+    var wkh = document.createElement("div"); wkh.className = "dow"; wkh.textContent = "Wk"; g.appendChild(wkh);
+
+    var first = new Date(view.y, view.m, 1);
+    var days = new Date(view.y, view.m + 1, 0).getDate();
+    var lead = first.getDay();
+    var t = todayStr();
+    var weekTotal = 0, col = 0;
+
+    function endWeek() {
+      var w = document.createElement("div");
+      w.className = "wk";
+      w.textContent = weekTotal ? fmt(weekTotal) : "";
+      g.appendChild(w);
+      weekTotal = 0; col = 0;
+    }
+    function blank() {
+      var b = document.createElement("div"); b.className = "cell blank"; g.appendChild(b);
+      col++; if (col === 7) endWeek();
+    }
+    for (var i = 0; i < lead; i++) blank();
+    for (var day = 1; day <= days; day++) {
+      var ds = view.y + "-" + pad(view.m + 1) + "-" + pad(day);
+      var dow = (lead + day - 1) % 7;
+      var c = document.createElement("button");
+      c.type = "button";
+      c.className = "cell" + (dow === 5 || dow === 6 ? " weekend" : "") + (ds in entries ? " has" : "") + (ds === t ? " today" : "") + (ds === selected ? " sel" : "");
+      c.dataset.date = ds;
+      var dEl = document.createElement("span"); dEl.className = "d"; dEl.textContent = day;
+      var hEl = document.createElement("span"); hEl.className = "h";
+      if (ds in entries) {
+        hEl.textContent = fmt(entries[ds]);
+        weekTotal += entries[ds];
+        var a = Math.min(1, entries[ds] / 9);
+        c.style.background = "color-mix(in srgb, var(--tint-strong) " + Math.round(20 + a * 55) + "%, var(--surface))";
+      }
+      c.setAttribute("aria-label", DAYS[dow] + " " + MONTHS[view.m] + " " + day + (ds in entries ? ", " + fmt(entries[ds]) + " hours" : ", no hours"));
+      c.appendChild(dEl); c.appendChild(hEl);
+      g.appendChild(c);
+      col++; if (col === 7) endWeek();
+    }
+    if (col > 0) { var rest = 7 - col; for (var j = 0; j < rest; j++) blank(); }
+  }
+
+  function render() { renderEntry(); renderTotals(); renderCalendar(); }
+
+  function select(ds, moveView) {
+    selected = ds;
+    if (moveView) view = { y: +ds.slice(0, 4), m: +ds.slice(5, 7) - 1 };
+    setInputFromEntry();
+    render();
+  }
+
+  /* ---------- Actions ---------- */
+  function flash(msg, isErr) {
+    var s = $("status");
+    s.textContent = msg;
+    s.className = "status" + (isErr ? " err" : "");
+  }
+
+  function nudge(delta) {
+    var v = parseHours($("hours").value);
+    if (v === null) v = 0;
+    if (isNaN(v)) v = 0;
+    v = Math.max(0, Math.min(24, v + delta));
+    $("hours").value = fmt(v);
+  }
+
+  var saving = false;
+  function save() {
+    if (saving || !store) return;
+    var v = parseHours($("hours").value);
+    if (isNaN(v)) return flash("Enter hours as a number, like 7.5 or 7:30.", true);
+    if (v === null) return flash("Type the hours you worked, or press Clear this day.", true);
+    if (v > 24) return flash("A day has 24 hours. Check the number.", true);
+    v = round2(v);
+    saving = true;
+    var d = selected;
+    store.save(d, v).then(function () {
+      var dt = parseDate(d);
+      if (d === selected) $("hours").value = fmt(v);
+      flash("Saved " + fmt(v) + " h for " + DOW[dt.getDay()] + " " + MONTHS[dt.getMonth()].slice(0, 3) + " " + dt.getDate());
+    }, function () {
+      flash("Could not save. Check your connection and try again.", true);
+    }).then(function () { saving = false; });
+  }
+
+  $("form").addEventListener("submit", function (e) { e.preventDefault(); save(); });
+  $("plus").addEventListener("click", function () { nudge(0.25); });
+  $("minus").addEventListener("click", function () { nudge(-0.25); });
+  $("prev").addEventListener("click", function () { select(addDays(selected, -1), true); });
+  $("next").addEventListener("click", function () { select(addDays(selected, 1), true); });
+  $("todayBtn").addEventListener("click", function () { select(todayStr(), true); });
+  $("mPrev").addEventListener("click", function () { view.m--; if (view.m < 0) { view.m = 11; view.y--; } render(); });
+  $("mNext").addEventListener("click", function () { view.m++; if (view.m > 11) { view.m = 0; view.y++; } render(); });
+  $("clear").addEventListener("click", function () {
+    if (!store) return;
+    var d = selected;
+    store.remove(d).then(function () { if (d === selected) { $("hours").value = ""; flash("Cleared"); } },
+      function () { flash("Could not clear. Try again.", true); });
+  });
+  $("grid").addEventListener("click", function (e) {
+    var b = e.target.closest(".cell");
+    if (b && b.dataset.date) select(b.dataset.date, false);
+  });
+
+  var chips = $("chips");
+  [4, 6, 7, 7.5, 8, 9].forEach(function (n) {
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "chip"; b.textContent = n;
+    b.addEventListener("click", function () { $("hours").value = n; save(); });
+    chips.appendChild(b);
+  });
+
+  /* ---------- Boot ---------- */
+  store = localStore();
+  setInputFromEntry();
+  render();
+})();
+</script>
+</body>
+</html>
