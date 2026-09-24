@@ -55,6 +55,7 @@
   }
 
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html, body { margin: 0; }
   body {
     background: var(--bg);
@@ -128,6 +129,33 @@
   .wk { font-family: var(--font-num); font-size: 12px; color: var(--ink-2); display: flex; align-items: center; justify-content: center; border-left: 1px solid var(--line); font-variant-numeric: tabular-nums; }
   .wk.head { border-left: 0; }
   .note { font-size: 12px; color: var(--ink-2); text-align: center; }
+
+  /* Tabs */
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .tabs { display: inline-flex; padding: 3px; border-radius: 9px; background: var(--surface); border: 1px solid var(--line); }
+  .tab { border: 0; background: transparent; padding: 7px 16px; border-radius: 7px; cursor: pointer; font-size: 14px; font-weight: 500; color: var(--ink-2); }
+  .tab[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
+  .view { display: grid; gap: 16px; }
+
+  /* Range */
+  .range-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .range-fields label { display: grid; gap: 4px; font-size: 12px; color: var(--ink-2); letter-spacing: .04em; text-transform: uppercase; }
+  .range-fields input { font-family: var(--font-num); font-size: 15px; padding: 9px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); min-width: 0; width: 100%; }
+  .presets { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .presets .chip { font-family: var(--font-body); font-size: 13px; }
+  .result { text-align: center; display: grid; gap: 4px; }
+  .result .big { font-family: var(--font-num); font-size: 52px; font-weight: 500; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .result .big small { font-size: 20px; color: var(--ink-2); margin-left: 4px; }
+  .result .sub { color: var(--ink-2); font-size: 14px; }
+  .result .actions { margin-top: 10px; }
+  .days { list-style: none; margin: 0; padding: 0; }
+  .days li { display: flex; justify-content: space-between; padding: 8px 2px; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .days li:last-child { border-bottom: 0; }
+  .days li.wkrow { color: var(--ink-2); font-size: 12px; letter-spacing: .04em; text-transform: uppercase; padding-top: 14px; border-bottom: 0; }
+  .days li.wkrow .n { text-transform: none; }
+  .days .n { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+  .empty { color: var(--ink-2); font-size: 14px; text-align: center; margin: 0; }
+  .card-title { font-weight: 600; font-size: 16px; margin: 0 0 12px; }
   @media (max-width: 420px) {
     .cell .h { font-size: 11px; }
     .field input { width: 120px; font-size: 30px; }
@@ -141,7 +169,15 @@
 <body>
 
 <main>
-  <h1>Daily hours</h1>
+  <div class="top">
+    <h1>Daily hours</h1>
+    <div class="tabs" role="tablist" aria-label="Views">
+      <button class="tab" id="tabLog" role="tab" type="button" aria-selected="true" aria-controls="viewLog">Log</button>
+      <button class="tab" id="tabRange" role="tab" type="button" aria-selected="false" aria-controls="viewRange">Totals</button>
+    </div>
+  </div>
+
+  <div class="view" id="viewLog" role="tabpanel" aria-labelledby="tabLog">
 
   <section class="card" aria-label="Log hours">
     <div class="day-nav">
@@ -185,6 +221,36 @@
     </div>
     <div class="grid" id="grid"></div>
   </section>
+  </div>
+
+  <div class="view" id="viewRange" role="tabpanel" aria-labelledby="tabRange" hidden>
+    <section class="card" aria-label="Date range">
+      <div class="range-fields">
+        <label>From <input type="date" id="rFrom"></label>
+        <label>To <input type="date" id="rTo"></label>
+      </div>
+      <div class="presets">
+        <button class="chip" type="button" data-preset="since" id="pSince" hidden>Since last copy</button>
+        <button class="chip" type="button" data-preset="14">Last 14 days</button>
+        <button class="chip" type="button" data-preset="month">This month</button>
+        <button class="chip" type="button" data-preset="lastmonth">Last month</button>
+      </div>
+    </section>
+
+    <section class="card result" aria-live="polite">
+      <div class="big" id="rTotal">0<small>h</small></div>
+      <div class="sub" id="rSub"></div>
+      <div class="actions">
+        <button class="primary" type="button" id="rCopy">Copy total</button>
+      </div>
+      <div class="status" id="rStatus" role="status"></div>
+    </section>
+
+    <section class="card" aria-label="Days in range">
+      <h2 class="card-title">Days in this range</h2>
+      <ul class="days" id="rDays"></ul>
+    </section>
+  </div>
 
 </main>
 
@@ -219,7 +285,7 @@
     return parseFloat(t);
   }
 
-  /* ---------- Storage: shared db when available, otherwise this browser ---------- */
+  /* ---------- Storage: the app's own storage, or this browser ---------- */
   function localStore() {
     var key = "daily-hours-v1";
     var nativeStore = window.AndroidStore || null;
@@ -324,7 +390,102 @@
     if (col > 0) { var rest = 7 - col; for (var j = 0; j < rest; j++) blank(); }
   }
 
-  function render() { renderEntry(); renderTotals(); renderCalendar(); }
+  /* ---------- Range totals ---------- */
+  var SHORT = function (s) { var d = parseDate(s); return MONTHS[d.getMonth()].slice(0, 3) + " " + d.getDate(); };
+  var LONG = function (s) { return SHORT(s) + ", " + s.slice(0, 4); };
+
+  function kvGet(k) {
+    try { return window.AndroidStore ? window.AndroidStore.get(k) : localStorage.getItem(k); } catch (e) { return null; }
+  }
+  function kvSet(k, v) {
+    try { if (window.AndroidStore) window.AndroidStore.set(k, v); else localStorage.setItem(k, v); } catch (e) {}
+  }
+
+  function setRange(from, to) { $("rFrom").value = from; $("rTo").value = to; renderRange(); }
+
+  function applyPreset(p) {
+    var t = todayStr(), d = parseDate(t);
+    if (p === "14") setRange(addDays(t, -13), t);
+    else if (p === "month") setRange(fmtDate(new Date(d.getFullYear(), d.getMonth(), 1)), t);
+    else if (p === "lastmonth") setRange(fmtDate(new Date(d.getFullYear(), d.getMonth() - 1, 1)), fmtDate(new Date(d.getFullYear(), d.getMonth(), 0)));
+    else if (p === "since") { var last = kvGet("lastCopiedTo"); if (last) setRange(addDays(last, 1), t); }
+  }
+
+  function currentRange() {
+    var a = $("rFrom").value, b = $("rTo").value;
+    if (!a || !b) return null;
+    return a <= b ? { from: a, to: b } : { from: b, to: a };
+  }
+
+  function renderRange() {
+    var r = currentRange();
+    var list = $("rDays");
+    list.innerHTML = "";
+    $("pSince").hidden = !kvGet("lastCopiedTo");
+    if (!r) {
+      $("rTotal").innerHTML = "&ndash;";
+      $("rSub").textContent = "Pick a start and end date";
+      return;
+    }
+    var keys = Object.keys(entries).filter(function (k) { return k >= r.from && k <= r.to; }).sort();
+    var total = keys.reduce(function (s, k) { return s + entries[k]; }, 0);
+    var span = Math.round((parseDate(r.to) - parseDate(r.from)) / 86400000) + 1;
+    $("rTotal").innerHTML = fmt(total) + "<small>h</small>";
+    $("rSub").textContent = SHORT(r.from) + " \u2013 " + LONG(r.to) + " \u00b7 " + keys.length + " of " + span + " days logged";
+    if (!keys.length) {
+      var li = document.createElement("li"); li.className = "empty"; li.textContent = "No hours logged in this range.";
+      list.appendChild(li);
+      return;
+    }
+    var curWeek = null, weekSum = 0, weekHead = null;
+    function closeWeek() { if (weekHead) weekHead.lastChild.textContent = fmt(weekSum) + " h"; }
+    keys.forEach(function (k) {
+      var ws = weekStart(k);
+      if (ws !== curWeek) {
+        closeWeek();
+        curWeek = ws; weekSum = 0;
+        weekHead = document.createElement("li"); weekHead.className = "wkrow";
+        var a = document.createElement("span"); a.textContent = "Week of " + SHORT(ws);
+        var b = document.createElement("span"); b.className = "n";
+        weekHead.appendChild(a); weekHead.appendChild(b);
+        list.appendChild(weekHead);
+      }
+      weekSum += entries[k];
+      var d = parseDate(k);
+      var li = document.createElement("li");
+      var l = document.createElement("span"); l.textContent = DOW[d.getDay()] + " " + SHORT(k);
+      var h = document.createElement("span"); h.className = "n"; h.textContent = fmt(entries[k]) + " h";
+      li.appendChild(l); li.appendChild(h);
+      list.appendChild(li);
+    });
+    closeWeek();
+  }
+
+  function copyText(text) {
+    if (window.AndroidStore && window.AndroidStore.copy) { try { window.AndroidStore.copy(text); return Promise.resolve(); } catch (e) {} }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).catch(function () { return legacyCopy(text); });
+    }
+    return legacyCopy(text);
+  }
+  function legacyCopy(text) {
+    var ta = document.createElement("textarea");
+    ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    var ok = false; try { ok = document.execCommand("copy"); } catch (e) {}
+    document.body.removeChild(ta);
+    return ok ? Promise.resolve() : Promise.reject();
+  }
+
+  function showTab(which) {
+    var range = which === "range";
+    $("viewLog").hidden = range; $("viewRange").hidden = !range;
+    $("tabLog").setAttribute("aria-selected", String(!range));
+    $("tabRange").setAttribute("aria-selected", String(range));
+    if (range) renderRange();
+  }
+
+  function render() { renderEntry(); renderTotals(); renderCalendar(); if (!$("viewRange").hidden) renderRange(); }
 
   function select(ds, moveView) {
     selected = ds;
@@ -386,6 +547,28 @@
     if (b && b.dataset.date) select(b.dataset.date, false);
   });
 
+  $("tabLog").addEventListener("click", function () { showTab("log"); });
+  $("tabRange").addEventListener("click", function () { showTab("range"); });
+  $("rFrom").addEventListener("change", renderRange);
+  $("rTo").addEventListener("change", renderRange);
+  document.querySelector(".presets").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-preset]"); if (b) applyPreset(b.dataset.preset);
+  });
+  $("rCopy").addEventListener("click", function () {
+    var r = currentRange(); if (!r) return;
+    var total = Object.keys(entries).reduce(function (s, k) { return k >= r.from && k <= r.to ? s + entries[k] : s; }, 0);
+    var text = fmt(total) + " hours (" + SHORT(r.from) + " \u2013 " + LONG(r.to) + ")";
+    copyText(text).then(function () {
+      kvSet("lastCopiedTo", r.to);
+      $("rStatus").className = "status";
+      $("rStatus").textContent = "Copied: " + text;
+      $("pSince").hidden = false;
+    }, function () {
+      $("rStatus").className = "status err";
+      $("rStatus").textContent = "Couldn't copy. The total is " + fmt(total) + " hours.";
+    });
+  });
+
   var chips = $("chips");
   [4, 6, 7, 7.5, 8, 9].forEach(function (n) {
     var b = document.createElement("button");
@@ -397,6 +580,11 @@
   /* ---------- Boot ---------- */
   store = localStore();
   setInputFromEntry();
+  (function initRange() {
+    var last = kvGet("lastCopiedTo"), t = todayStr();
+    if (last && last < t) setRange(addDays(last, 1), t); else applyPreset("14");
+  })();
+  window.addEventListener("appresume", render);
   render();
 })();
 </script>
