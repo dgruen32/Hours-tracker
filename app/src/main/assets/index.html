@@ -157,6 +157,11 @@
   .empty { color: var(--ink-2); font-size: 14px; text-align: center; margin: 0; }
   .card-title { font-weight: 600; font-size: 16px; margin: 0 0 12px; }
 
+  /* Backup */
+  .backup p { margin: 0 0 10px; font-size: 13px; color: var(--ink-2); }
+  .backup textarea { width: 100%; min-height: 80px; font-family: var(--font-num); font-size: 12px; padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); resize: vertical; }
+  .backup .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
   /* Send schedule */
   .sched-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
   .sched-head .card-title { margin: 0; }
@@ -299,6 +304,15 @@
     <section class="card" aria-label="Days in range">
       <h2 class="card-title">Days in this range</h2>
       <ul class="days" id="rDays"></ul>
+    </section>
+
+    <section class="card backup" aria-label="Backup">
+      <h2 class="card-title">Backup</h2>
+      <p>Copy a backup of all your hours and paste it somewhere safe, like a note or an email to yourself. To bring hours back, paste a backup below and tap Restore. Restoring adds to what's already here and never deletes days.</p>
+      <div class="row"><button class="ghost" type="button" id="bCopy">Copy backup</button></div>
+      <textarea id="bText" placeholder="Paste a backup here" aria-label="Backup text"></textarea>
+      <div class="row"><button class="primary" type="button" id="bRestore">Restore</button></div>
+      <div class="status" id="bStatus" role="status"></div>
     </section>
   </div>
 
@@ -709,6 +723,31 @@
   $("schedSave").addEventListener("click", function () {
     var v = $("schedStartInput").value; if (!v) return;
     kvSet("schedStart", v); $("schedEdit").hidden = true; renderSchedule();
+  });
+
+  function bMsg(t, err) { $("bStatus").className = "status" + (err ? " err" : ""); $("bStatus").textContent = t; }
+  $("bCopy").addEventListener("click", function () {
+    var keys = ["schedStart", "sentThrough", "lastCopiedFrom", "lastCopiedTo", "lastCopiedHours", "lastCopiedAt"];
+    var settings = {};
+    keys.forEach(function (k) { var v = kvGet(k); if (v) settings[k] = v; });
+    var text = "HOURS-BACKUP " + JSON.stringify({ v: 1, made: todayStr(), entries: entries, settings: settings });
+    copyText(text).then(function () { bMsg("Backup copied: " + Object.keys(entries).length + " days. Paste it somewhere safe."); },
+      function () { $("bText").value = text; bMsg("Couldn't copy automatically. The backup is in the box above; select it and copy it.", true); });
+  });
+  $("bRestore").addEventListener("click", function () {
+    var raw = $("bText").value.trim().replace(/^HOURS-BACKUP\s*/, "");
+    var data; try { data = JSON.parse(raw); } catch (e) { data = null; }
+    if (!data || typeof data.entries !== "object") return bMsg("That doesn't look like a backup. Paste the whole text that starts with HOURS-BACKUP.", true);
+    var added = 0, chain = Promise.resolve();
+    Object.keys(data.entries).forEach(function (d) {
+      var h = data.entries[d];
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || typeof h !== "number") return;
+      if (!(d in entries)) added++;
+      chain = chain.then(function () { return store.save(d, h); });
+    });
+    var st = data.settings || {};
+    Object.keys(st).forEach(function (k) { if (!kvGet(k)) kvSet(k, st[k]); });
+    chain.then(function () { $("bText").value = ""; render(); renderRange(); bMsg("Restored. " + added + " new days added."); });
   });
 
   var chips = $("chips");

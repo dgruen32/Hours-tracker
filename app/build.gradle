@@ -10,15 +10,24 @@ android {
         applicationId 'com.dani.hours'
         minSdk 24
         targetSdk 34
-        versionCode 3
-        versionName '1.2'
+        versionCode 4
+        versionName '1.3'
+    }
+
+    signingConfigs {
+        // A fixed key kept in the repo, so every build can update the installed app in place.
+        hours {
+            storeFile file('hours.keystore')
+            storePassword 'hourstracker'
+            keyAlias 'hours'
+            keyPassword 'hourstracker'
+        }
     }
 
     buildTypes {
         release {
             minifyEnabled false
-            // Signed with the build's debug key so the APK installs directly by sideloading.
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.hours
         }
     }
 
