@@ -156,6 +156,33 @@
   .days .n { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
   .empty { color: var(--ink-2); font-size: 14px; text-align: center; margin: 0; }
   .card-title { font-weight: 600; font-size: 16px; margin: 0 0 12px; }
+
+  /* Send schedule */
+  .sched-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .sched-head .card-title { margin: 0; }
+  .sched-every { font-size: 13px; color: var(--ink-2); }
+  .textbtn { background: none; border: 0; padding: 0 0 0 6px; color: var(--accent); cursor: pointer; font-size: 13px; text-decoration: underline; text-underline-offset: 2px; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: .03em; padding: 3px 10px; border-radius: 999px; }
+  .pill.due { background: var(--today); color: var(--surface); }
+  .pill.ok { background: var(--tint); color: var(--accent); }
+  .pill.wait { background: var(--bg); color: var(--ink-2); border: 1px solid var(--line); }
+  .sched-main { display: grid; gap: 6px; }
+  .sched-line { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .sched-period { font-weight: 600; font-size: 17px; }
+  .sched-hours { font-family: var(--font-num); font-size: 17px; font-variant-numeric: tabular-nums; }
+  .sched-note { font-size: 13px; color: var(--ink-2); }
+  .sched-actions { margin-top: 10px; }
+  .ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); border-radius: 8px; padding: 9px 16px; font-weight: 600; cursor: pointer; }
+  .sched-last { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-2); }
+  .sched-last b { color: var(--ink); font-weight: 600; }
+  .sched-edit { margin-top: 12px; display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
+  .sched-edit label { display: grid; gap: 4px; font-size: 12px; color: var(--ink-2); letter-spacing: .04em; text-transform: uppercase; }
+  .sched-edit input { font-family: var(--font-num); font-size: 15px; padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); }
+  .banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; text-align: left; cursor: pointer;
+    background: var(--surface); border: 1px solid var(--today); border-radius: 10px; padding: 12px 14px; }
+  .banner .t { font-size: 14px; }
+  .banner .t b { display: block; font-size: 15px; }
+  .banner .go { color: var(--today); font-weight: 600; white-space: nowrap; }
   @media (max-width: 420px) {
     .cell .h { font-size: 11px; }
     .field input { width: 120px; font-size: 30px; }
@@ -178,6 +205,10 @@
   </div>
 
   <div class="view" id="viewLog" role="tabpanel" aria-labelledby="tabLog">
+  <button class="banner" type="button" id="dueBanner" hidden>
+    <span class="t"><b id="dueBannerTitle">Hours due</b><span id="dueBannerSub"></span></span>
+    <span class="go">Send &rsaquo;</span>
+  </button>
 
   <section class="card" aria-label="Log hours">
     <div class="day-nav">
@@ -224,6 +255,25 @@
   </div>
 
   <div class="view" id="viewRange" role="tabpanel" aria-labelledby="tabRange" hidden>
+    <section class="card" aria-label="Send schedule">
+      <div class="sched-head">
+        <h2 class="card-title">Send schedule</h2>
+        <span class="sched-every"><span id="schedEvery"></span><button class="textbtn" type="button" id="schedEditBtn">Change</button></span>
+      </div>
+      <div class="sched-main">
+        <div><span class="pill" id="schedPill"></span></div>
+        <div class="sched-line"><span class="sched-period" id="schedPeriod"></span><span class="sched-hours" id="schedHours"></span></div>
+        <div class="sched-note" id="schedNote"></div>
+      </div>
+      <div class="sched-actions"><button class="ghost" type="button" id="schedLoad">Show this period</button></div>
+      <div class="sched-last" id="schedLast"></div>
+      <div class="sched-edit" id="schedEdit" hidden>
+        <label>First send date <input type="date" id="schedStartInput"></label>
+        <button class="primary" type="button" id="schedSave">Save</button>
+        <span class="sched-note">Every 2 weeks from this date. Each send covers the 14 days before it.</span>
+      </div>
+    </section>
+
     <section class="card" aria-label="Date range">
       <div class="range-fields">
         <label>From <input type="date" id="rFrom"></label>
@@ -401,6 +451,76 @@
     try { if (window.AndroidStore) window.AndroidStore.set(k, v); else localStorage.setItem(k, v); } catch (e) {}
   }
 
+  /* ---------- Send schedule: every 14 days from a start date ---------- */
+  var DEFAULT_SCHED_START = "2026-10-05";
+  function schedStart() { return kvGet("schedStart") || DEFAULT_SCHED_START; }
+  function daysBetween(a, b) { return Math.round((parseDate(b) - parseDate(a)) / 86400000); }
+  function sumHours(from, to) {
+    return Object.keys(entries).reduce(function (s, k) { return k >= from && k <= to ? s + entries[k] : s; }, 0);
+  }
+  function longDay(s) { var d = parseDate(s); return DAYS[d.getDay()] + ", " + SHORT(s); }
+
+  /* The send date that is due now (latest on or before today), and the next one after it. */
+  function schedule() {
+    var start = schedStart(), t = todayStr();
+    var due = null, next;
+    if (t >= start) {
+      var k = Math.floor(daysBetween(start, t) / 14);
+      due = addDays(start, k * 14);
+      next = addDays(due, 14);
+    } else {
+      next = start;
+    }
+    var sentThrough = kvGet("sentThrough") || "";
+    var dueFrom = due ? addDays(due, -14) : null, dueTo = due ? addDays(due, -1) : null;
+    var dueSent = !due || sentThrough >= dueTo;
+    return { start: start, today: t, due: due, dueFrom: dueFrom, dueTo: dueTo, dueSent: dueSent,
+             next: next, nextFrom: addDays(next, -14), nextTo: addDays(next, -1) };
+  }
+
+  function renderSchedule() {
+    var sc = schedule();
+    $("schedEvery").textContent = "Every 2 weeks from " + SHORT(sc.start);
+    var pill = $("schedPill");
+    if (!sc.dueSent) {
+      var late = daysBetween(sc.due, sc.today);
+      pill.className = "pill due";
+      pill.textContent = late === 0 ? "Due today" : "Due since " + longDay(sc.due);
+      $("schedPeriod").textContent = SHORT(sc.dueFrom) + " \u2013 " + SHORT(sc.dueTo);
+      $("schedHours").textContent = fmt(sumHours(sc.dueFrom, sc.dueTo)) + " h";
+      $("schedNote").textContent = "Copy the total below to mark it sent. Next send after this: " + longDay(sc.next) + ".";
+      $("schedLoad").dataset.from = sc.dueFrom; $("schedLoad").dataset.to = sc.dueTo;
+    } else {
+      var inDays = daysBetween(sc.today, sc.next);
+      pill.className = sc.due ? "pill ok" : "pill wait";
+      pill.textContent = sc.due ? "Up to date" : "First send coming up";
+      var soFarTo = sc.today < sc.nextTo ? sc.today : sc.nextTo;
+      $("schedPeriod").textContent = SHORT(sc.nextFrom) + " \u2013 " + SHORT(sc.nextTo);
+      $("schedHours").textContent = (sc.today >= sc.nextFrom ? fmt(sumHours(sc.nextFrom, soFarTo)) : "0") + " h so far";
+      $("schedNote").textContent = "Next send: " + longDay(sc.next) + (inDays === 0 ? " (today)" : inDays === 1 ? " (tomorrow)" : " (in " + inDays + " days)") + ".";
+      $("schedLoad").dataset.from = sc.nextFrom; $("schedLoad").dataset.to = sc.nextTo;
+    }
+    var lf = kvGet("lastCopiedFrom"), lt = kvGet("lastCopiedTo"), lh = kvGet("lastCopiedHours"), la = kvGet("lastCopiedAt");
+    var last = $("schedLast");
+    last.textContent = "";
+    if (lt) {
+      last.appendChild(document.createTextNode("Last range you copied: "));
+      var b = document.createElement("b");
+      b.textContent = (lf ? SHORT(lf) + " \u2013 " : "through ") + LONG(lt) + (lh ? " \u00b7 " + lh + " h" : "");
+      last.appendChild(b);
+      if (la) last.appendChild(document.createTextNode(", copied " + longDay(la)));
+    } else {
+      last.textContent = "You haven't copied a total yet.";
+    }
+    // banner on the Log tab
+    var banner = $("dueBanner");
+    banner.hidden = sc.dueSent;
+    if (!sc.dueSent) {
+      $("dueBannerTitle").textContent = daysBetween(sc.due, sc.today) === 0 ? "Hours due today" : "Hours due since " + SHORT(sc.due);
+      $("dueBannerSub").textContent = SHORT(sc.dueFrom) + " \u2013 " + SHORT(sc.dueTo) + " \u00b7 " + fmt(sumHours(sc.dueFrom, sc.dueTo)) + " h";
+    }
+  }
+
   function setRange(from, to) { $("rFrom").value = from; $("rTo").value = to; renderRange(); }
 
   function applyPreset(p) {
@@ -422,6 +542,7 @@
     var list = $("rDays");
     list.innerHTML = "";
     $("pSince").hidden = !kvGet("lastCopiedTo");
+    renderSchedule();
     if (!r) {
       $("rTotal").innerHTML = "&ndash;";
       $("rSub").textContent = "Pick a start and end date";
@@ -485,7 +606,7 @@
     if (range) renderRange();
   }
 
-  function render() { renderEntry(); renderTotals(); renderCalendar(); if (!$("viewRange").hidden) renderRange(); }
+  function render() { renderEntry(); renderTotals(); renderCalendar(); renderSchedule(); if (!$("viewRange").hidden) renderRange(); }
 
   function select(ds, moveView) {
     selected = ds;
@@ -559,7 +680,13 @@
     var total = Object.keys(entries).reduce(function (s, k) { return k >= r.from && k <= r.to ? s + entries[k] : s; }, 0);
     var text = fmt(total) + " hours (" + SHORT(r.from) + " \u2013 " + LONG(r.to) + ")";
     copyText(text).then(function () {
+      kvSet("lastCopiedFrom", r.from);
       kvSet("lastCopiedTo", r.to);
+      kvSet("lastCopiedHours", fmt(total));
+      kvSet("lastCopiedAt", todayStr());
+      var sc = schedule();
+      if (!sc.dueSent && r.from <= sc.dueTo && r.to >= sc.dueTo) kvSet("sentThrough", sc.dueTo);
+      renderSchedule();
       $("rStatus").className = "status";
       $("rStatus").textContent = "Copied: " + text;
       $("pSince").hidden = false;
@@ -567,6 +694,21 @@
       $("rStatus").className = "status err";
       $("rStatus").textContent = "Couldn't copy. The total is " + fmt(total) + " hours.";
     });
+  });
+
+  $("dueBanner").addEventListener("click", function () {
+    var sc = schedule(); showTab("range"); if (!sc.dueSent) setRange(sc.dueFrom, sc.dueTo);
+  });
+  $("schedLoad").addEventListener("click", function () {
+    var b = $("schedLoad"); if (b.dataset.from) setRange(b.dataset.from, b.dataset.to);
+  });
+  $("schedEditBtn").addEventListener("click", function () {
+    var ed = $("schedEdit"); ed.hidden = !ed.hidden;
+    if (!ed.hidden) $("schedStartInput").value = schedStart();
+  });
+  $("schedSave").addEventListener("click", function () {
+    var v = $("schedStartInput").value; if (!v) return;
+    kvSet("schedStart", v); $("schedEdit").hidden = true; renderSchedule();
   });
 
   var chips = $("chips");
@@ -581,8 +723,9 @@
   store = localStore();
   setInputFromEntry();
   (function initRange() {
-    var last = kvGet("lastCopiedTo"), t = todayStr();
-    if (last && last < t) setRange(addDays(last, 1), t); else applyPreset("14");
+    var sc = schedule();
+    if (!sc.dueSent) setRange(sc.dueFrom, sc.dueTo);
+    else setRange(sc.nextFrom, sc.today < sc.nextTo ? (sc.today < sc.nextFrom ? sc.nextFrom : sc.today) : sc.nextTo);
   })();
   window.addEventListener("appresume", render);
   render();
